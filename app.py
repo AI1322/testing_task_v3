@@ -4,6 +4,7 @@ import sqlite3
 import os
 from datetime import datetime
 import json
+import time # Lisa see
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Muuda seda tootmiskeskkonnas
@@ -443,7 +444,7 @@ def manage_attachment(todo_id):
     """Faili manuse lisamine või eemaldamine"""
     if not is_logged_in():
         return jsonify({'success': False, 'message': 'Sa pead olema sisse logitud'})
-    conn = sqlite3.connect('todo.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
         cursor.execute('SELECT id, attachment_path FROM todos WHERE id = ? AND user_id = ?', (todo_id, session['user_id']))
@@ -483,7 +484,7 @@ def export_data():
     """Ekspordib kasutaja ülesanded JSON-ina"""
     if not is_logged_in():
         return jsonify({'success': False, 'message': 'Sa pead olema sisse logitud'})
-    conn = sqlite3.connect('todo.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''SELECT title, description, priority, due_date, completed, tags FROM todos WHERE user_id = ?''', (session['user_id'],))
     items = []
@@ -508,7 +509,7 @@ def import_data():
     items = data.get('items') or []
     if not isinstance(items, list):
         return jsonify({'success': False, 'message': 'Vale formaat'})
-    conn = sqlite3.connect('todo.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
         for it in items:
@@ -537,7 +538,7 @@ def activity():
     """Tagastab viimased tegevuslogid"""
     if not is_logged_in():
         return jsonify({'success': False, 'message': 'Sa pead olema sisse logitud'})
-    conn = sqlite3.connect('todo.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
         SELECT action, details, created_at, todo_id FROM activity_logs
@@ -558,7 +559,7 @@ def update_profile():
     new_username = (data.get('username') or '').strip()
     if not new_username:
         return jsonify({'success': False, 'message': 'Kasutajanimi on kohustuslik'})
-    conn = sqlite3.connect('todo.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
         cursor.execute('SELECT id FROM users WHERE username = ? AND id != ?', (new_username, session['user_id']))
@@ -578,7 +579,7 @@ def delete_account():
     """Kasutajakonto kustutamine (kustutab ka kasutaja ülesanded)"""
     if not is_logged_in():
         return jsonify({'success': False, 'message': 'Sa pead olema sisse logitud'})
-    conn = sqlite3.connect('todo.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
         uid = session['user_id']
@@ -593,6 +594,31 @@ def delete_account():
     finally:
         conn.close()
 
+# --- Stress-testimise näidislehed ---
+
+@app.route('/fast')
+def fast_page():
+    """Kiire leht - tagastab kohe vastuse."""
+    return "See leht laadis väga kiiresti!"
+
+@app.route('/medium')
+def medium_page():
+    """Keskmise kiirusega leht - teeb väikese andmebaasi päringu."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM users')
+    user_count = cursor.fetchone()[0]
+    conn.close()
+    return f"Meil on kokku {user_count} kasutajat. See leht laadis keskmise kiirusega."
+
+@app.route('/slow')
+def slow_page():
+    """Aeglane leht - simuleerib 2-sekundilist ootamist."""
+    time.sleep(2) # Simuleerime pikka operatsiooni
+    return "See leht laadis aeglaselt (2 sekundit viivitust)."
+
+
 if __name__ == '__main__':
     init_db()
+    # Kasutaja muutis pordi 5001 peale, jätame selle alles
     app.run(debug=True, host='0.0.0.0', port=5001)
